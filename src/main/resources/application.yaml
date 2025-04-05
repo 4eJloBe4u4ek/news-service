@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: News
+  datasource:
+    url: jdbc:postgresql://localhost:5433/news
+    username: postgres
+    password: password
+  liquibase:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+jwt:
+  secret: ${JWT_SECRET}
+
+server:
+  port: 8083
