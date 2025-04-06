@@ -5,14 +5,18 @@ import backend.newsservice.dto.NewsResponse;
 import backend.newsservice.entity.NewsEntity;
 import backend.newsservice.exception.NewsNotFoundException;
 import backend.newsservice.exception.UnauthorizedException;
+import backend.newsservice.kafka.NewsDeletedEvent;
+import backend.newsservice.kafka.NewsKafkaTopicProperties;
 import backend.newsservice.repository.NewsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,6 +25,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class NewsService {
     private final NewsRepository newsRepository;
+    private final KafkaTemplate<Long, Object> kafkaTemplate;
+    private final NewsKafkaTopicProperties topicProperties;
 
     public ListNewsResponse getNewsPage(int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
@@ -44,6 +50,7 @@ public class NewsService {
         return toNewsResponse(newsRepository.save(newsEntity));
     }
 
+    @Transactional
     public NewsResponse updateNews(Long id, String title, String text) {
         NewsEntity news = newsRepository.findById(id).orElseThrow(() -> new NewsNotFoundException("News not found"));
         String author = getCurrentUserName();
@@ -56,6 +63,7 @@ public class NewsService {
         return toNewsResponse(newsRepository.save(news));
     }
 
+    @Transactional
     public void deleteNews(Long id) {
         NewsEntity news = newsRepository.findById(id).orElseThrow(() -> new NewsNotFoundException("News not found"));
         String author = getCurrentUserName();
@@ -63,13 +71,15 @@ public class NewsService {
             throw new UnauthorizedException("Access denied");
         }
 
+        kafkaTemplate.send(topicProperties.getNewsDeleted(), new NewsDeletedEvent(news.getId()));
+
         newsRepository.delete(news);
     }
 
     private Authentication getAuthentication() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {
-            throw new UnauthorizedException("Access denied");
+            throw new UnauthorizedException("Access denied: no authentication found");
         } else {
             return authentication;
         }
