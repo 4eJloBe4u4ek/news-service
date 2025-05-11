@@ -1,5 +1,7 @@
 package backend.newsservice.service;
 
+import backend.newsservice.client.CommentClient;
+import backend.newsservice.dto.CommentResponse;
 import backend.newsservice.dto.ListNewsResponse;
 import backend.newsservice.dto.NewsResponse;
 import backend.newsservice.entity.NewsEntity;
@@ -12,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,13 +30,15 @@ public class NewsService {
     private final NewsRepository newsRepository;
     private final KafkaTemplate<Long, Object> kafkaTemplate;
     private final NewsKafkaTopicProperties topicProperties;
+    private final CommentClient commentClient;
 
     public ListNewsResponse getNewsPage(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(page, size, Sort.Direction.DESC, "time");
         Page<NewsEntity> newsPage = newsRepository.findAll(pageable);
+        int totalPages = newsPage.getTotalPages();
 
         List<NewsResponse> newsResponses = newsPage.getContent().stream().map(this::toNewsResponse).toList();
-        return new ListNewsResponse(newsResponses, newsResponses.size());
+        return new ListNewsResponse(newsResponses, newsResponses.size(), totalPages);
     }
 
     public NewsResponse getNewsById(Long id) {
@@ -90,15 +95,17 @@ public class NewsService {
     }
 
     private String getCurrentUserName() {
-        return getAuthentication().getName();
+        return getAuthentication().getDetails().toString();
     }
 
     private NewsResponse toNewsResponse(NewsEntity newsEntity) {
+        List<CommentResponse> comments = commentClient.getAllCommentsForNews(newsEntity.getId()).comments();
         return new NewsResponse(
                 newsEntity.getId(),
                 newsEntity.getTime(),
                 newsEntity.getTitle(),
                 newsEntity.getText(),
-                newsEntity.getAuthor());
+                newsEntity.getAuthor(),
+                comments);
     }
 }
