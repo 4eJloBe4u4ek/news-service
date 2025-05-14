@@ -10,7 +10,7 @@ public class CommentClient {
     private final WebClient commentClient;
 
     public CommentClient(NewsConfig newsConfig) {
-        this.commentClient = WebClient.builder().baseUrl(newsConfig.baseUrl()).build();
+        this.commentClient = WebClient.builder().baseUrl(newsConfig.commentService().baseUrl()).build();
     }
 
     public ListCommentResponse getAllCommentsForNews(Long newsId) {

@@ -1,9 +1,11 @@
 package backend.newsservice.service;
 
+import backend.newsservice.client.AuthClient;
 import backend.newsservice.client.CommentClient;
 import backend.newsservice.dto.CommentResponse;
 import backend.newsservice.dto.ListNewsResponse;
 import backend.newsservice.dto.NewsResponse;
+import backend.newsservice.dto.UserInfoResponse;
 import backend.newsservice.entity.NewsEntity;
 import backend.newsservice.exception.NewsNotFoundException;
 import backend.newsservice.exception.UnauthorizedException;
@@ -31,6 +33,7 @@ public class NewsService {
     private final KafkaTemplate<Long, Object> kafkaTemplate;
     private final NewsKafkaTopicProperties topicProperties;
     private final CommentClient commentClient;
+    private final AuthClient authClient;
 
     public ListNewsResponse getNewsPage(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.Direction.DESC, "time");
@@ -46,9 +49,9 @@ public class NewsService {
     }
 
     public NewsResponse createNews(String title, String text) {
-        String author = getCurrentUserName();
+        Long authorId = getCurrentUserId();
         NewsEntity newsEntity = new NewsEntity();
-        newsEntity.setAuthor(author);
+        newsEntity.setAuthorId(authorId);
         newsEntity.setTitle(title);
         newsEntity.setText(text);
         newsEntity.setTime(Instant.now());
@@ -58,8 +61,8 @@ public class NewsService {
     @Transactional
     public NewsResponse updateNews(Long id, String title, String text) {
         NewsEntity news = newsRepository.findById(id).orElseThrow(() -> new NewsNotFoundException("News not found"));
-        String author = getCurrentUserName();
-        if (!news.getAuthor().equals(author) && !hasAdminRole()) {
+        Long authorId = getCurrentUserId();
+        if (!news.getAuthorId().equals(authorId) && !hasAdminRole()) {
             throw new UnauthorizedException("Access denied");
         }
 
@@ -71,8 +74,8 @@ public class NewsService {
     @Transactional
     public void deleteNews(Long id) {
         NewsEntity news = newsRepository.findById(id).orElseThrow(() -> new NewsNotFoundException("News not found"));
-        String author = getCurrentUserName();
-        if (!news.getAuthor().equals(author) && !hasAdminRole()) {
+        Long authorId = getCurrentUserId();
+        if (!news.getAuthorId().equals(authorId) && !hasAdminRole()) {
             throw new UnauthorizedException("Access denied");
         }
 
@@ -94,18 +97,20 @@ public class NewsService {
         return getAuthentication().getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
     }
 
-    private String getCurrentUserName() {
-        return getAuthentication().getDetails().toString();
+    private Long getCurrentUserId() {
+        return Long.valueOf(getAuthentication().getName());
     }
 
     private NewsResponse toNewsResponse(NewsEntity newsEntity) {
         List<CommentResponse> comments = commentClient.getAllCommentsForNews(newsEntity.getId()).comments();
+        UserInfoResponse userInfo = authClient.getUserById(newsEntity.getAuthorId());
         return new NewsResponse(
                 newsEntity.getId(),
                 newsEntity.getTime(),
                 newsEntity.getTitle(),
                 newsEntity.getText(),
-                newsEntity.getAuthor(),
+                newsEntity.getAuthorId(),
+                userInfo.username(),
                 comments);
     }
 }

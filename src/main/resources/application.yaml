@@ -1,6 +1,8 @@
 app:
   comment-service:
     base-url: http://localhost:8084
+  auth-service:
+    base-url: http://localhost:8081
 
 spring:
   application:
